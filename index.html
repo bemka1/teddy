@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bé Học Tiếng Anh Cùng Gấu Teddy</title>
+<style>
+  :root { --primary: #4F46E5; --bg: #FFF7ED; --card: #FFFFFF; --text: #1F2937; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; justify-content: center; padding: 16px; }
+  .app-container { width: 100%; max-width: 480px; background: var(--card); border-radius: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); display: flex; flex-direction: column; overflow: hidden; height: 90vh; }
+  
+  header { background: #FFEDD5; padding: 16px; text-align: center; border-bottom: 2px solid #FED7AA; }
+  header h1 { font-size: 18px; color: #C2410C; }
+  .lesson-select { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #FDBA74; margin-top: 8px; font-weight: bold; background: white; }
+
+  .bear-avatar-wrap { background: #FFEDD5; padding: 10px; display: flex; justify-content: center; align-items: center; border-bottom: 1px solid #FED7AA; }
+  .bear-avatar { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: transform 0.2s; }
+  .bear-avatar.speaking { animation: bounce 0.6s infinite alternate; }
+  @keyframes bounce { 0% { transform: scale(1); } 100% { transform: scale(1.08); } }
+
+  .chat-box { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background: #FAFAF9; }
+  .msg { max-width: 85%; padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.4; }
+  .msg.teddy { background: #E0E7FF; color: #3730A3; align-self: flex-start; border-bottom-left-radius: 4px; }
+  .msg.user { background: #4F46E5; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+  
+  /* CẬP NHẬT: Đổi màu dòng nghĩa tiếng Việt sang màu đỏ nổi bật */
+  .msg .vi-text { 
+    font-size: 13px; 
+    margin-top: 4px; 
+    color: #DC2626; /* Màu đỏ nổi bật */
+    font-weight: 600;
+    font-style: italic; 
+    border-top: 1px dashed rgba(220, 38, 38, 0.2); 
+    padding-top: 4px; 
+  }
+
+  /* Style riêng cho từ vựng được in đậm & bấm để nghe */
+  .vocab-clickable {
+    font-weight: 800;
+    color: #4F46E5;
+    background: #FEF3C7;
+    padding: 2px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid #FCD34D;
+    display: inline-block;
+    transition: transform 0.1s;
+  }
+  .vocab-clickable:active { transform: scale(0.95); }
+
+  .suggestions-header { font-size: 12px; font-weight: bold; color: #92400E; padding: 6px 12px 0 12px; background: #FFF; }
+  .suggestions { padding: 8px 12px; background: #FFF; border-top: 1px solid #E7E5E4; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap; }
+  .chip { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+
+  .controls { padding: 12px; background: white; border-top: 1px solid #E7E5E4; display: flex; gap: 10px; align-items: center; }
+  .btn-mic { flex: 1; background: #4F46E5; color: white; border: none; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .btn-mic.listening { background: #EF4444; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <header>
+    <h1>🧸 Học Tiếng Anh Cùng Gấu Teddy</h1>
+    <select id="lessonSelect" class="lesson-select"><option>Đang nạp bài học...</option></select>
+  </header>
+
+  <div class="bear-avatar-wrap">
+    <img id="bearImg" class="bear-avatar" src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Z2azRtNDBmcGN6aDF2MTh2dHh2ZjF6ZDRqOHk3eGppYmV1bmN2dyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/kZfP8aTIs16P3tPByL/giphy.gif" alt="Teddy Bear">
+  </div>
+
+  <div class="chat-box" id="chatBox"></div>
+
+  <div class="suggestions-header" id="suggestionHeader">💡 Gợi ý cho bé:</div>
+  <div class="suggestions" id="suggestionsBox"></div>
+
+  <div class="controls">
+    <button class="btn-mic" id="btnMic">🎤 Bấm để nói với Teddy</button>
+  </div>
+</div>
+
+<script>
+const apiKey = localStorage.getItem('TEDDY_API_KEY');
+const lessons = JSON.parse(localStorage.getItem('TEDDY_LESSONS') || '[]');
+
+const lessonSelect = document.getElementById('lessonSelect');
+const chatBox = document.getElementById('chatBox');
+const suggestionsBox = document.getElementById('suggestionsBox');
+const btnMic = document.getElementById('btnMic');
+const bearImg = document.getElementById('bearImg');
+
+let childName = '';
+let currentStep = 'ASK_NAME'; 
+let currentLesson = null;
+let currentWordIndex = 0;
+let repeatCount = 0;
+
+function initLessons() {
+  lessonSelect.innerHTML = '';
+  if(lessons.length === 0) {
+    lessonSelect.innerHTML = '<option>Chưa có bài học (Vào admin.html để thêm)</option>';
+    return;
+  }
+  lessons.forEach((l, idx) => {
+    const opt = document.createElement('option');
+    opt.value = idx;
+    opt.textContent = `📚 Bài: ${l.title}`;
+    lessonSelect.appendChild(opt);
+  });
+  
+  startFlow();
+}
+
+lessonSelect.onchange = (e) => {
+  currentLesson = lessons[parseInt(e.target.value)];
+  currentWordIndex = 0;
+  repeatCount = 0;
+  chatBox.innerHTML = '';
+  if(childName) {
+    startActionStep();
+  } else {
+    startFlow();
+  }
+};
+
+function startFlow() {
+  chatBox.innerHTML = '';
+  currentStep = 'ASK_NAME';
+  const introEn = "Hello! I am Teddy. What is your name?";
+  const introVi = "Xin chào! Tớ là gấu Teddy. Bé tên là gì nào?";
+  
+  addMessage('teddy', introEn, introVi);
+  speak(introEn);
+
+  setSuggestions([
+    { en: "My name is Nam", vi: "Tên tớ là Nam" },
+    { en: "I am Anna", vi: "Tớ là Anna" }
+  ]);
+}
+
+async function startActionStep() {
+  currentStep = 'ACTION_QUESTION';
+  repeatCount = 0;
+  const wordObj = currentLesson.words[currentWordIndex];
+
+  if(!wordObj) {
+    const finishEn = `Great job, ${childName}! You finished all words today!`;
+    const finishVi = `Giỏi lắm ${childName}! Bé đã hoàn thành hết từ vựng hôm nay rồi!`;
+    addMessage('teddy', finishEn, finishVi);
+    speak(finishEn);
+    setSuggestions([]);
+    return;
+  }
+
+  const prompt = `Bạn là gấu Teddy nói chuyện với bé tên "${childName}". Hãy tạo 1 câu hỏi tương tác/hành động đơn giản chứa từ "${wordObj.en}" (${wordObj.vi}) cho bé.
+Ví dụ nếu từ là "head", hãy hỏi: "${childName}, can you touch your head?"
+Trả về đúng JSON không bọc markdown:
+{
+  "question_en": "Câu hỏi tiếng Anh chứa tên ${childName} và từ ${wordObj.en}",
+  "question_vi": "Bản dịch tiếng Việt",
+  "suggestions": [
+    {"en": "I can!", "vi": "Con làm được!"},
+    {"en": "Yes, I can!", "vi": "Có, con làm được!"}
+  ]
+}`;
+
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
+    });
+
+    const data = await response.json();
+    let rawText = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(rawText);
+
+    addMessage('teddy', parsed.question_en, parsed.question_vi, wordObj.en);
+    speak(parsed.question_en);
+    setSuggestions(parsed.suggestions);
+
+  } catch (e) {
+    const defaultEn = `${childName}, can you touch your ${wordObj.en}?`;
+    const defaultVi = `${childName}, bé có thể chạm vào ${wordObj.vi} của mình không?`;
+    addMessage('teddy', defaultEn, defaultVi, wordObj.en);
+    speak(defaultEn);
+    setSuggestions([{ en: "I can!", vi: "Con làm được!" }]);
+  }
+}
+
+function askToRepeat() {
+  currentStep = 'PRONOUNCE_REPEAT';
+  const wordObj = currentLesson.words[currentWordIndex];
+  
+  let msgEn = "", msgVi = "";
+  if(repeatCount === 0) {
+    msgEn = `Good job, ${childName}! Now, say "${wordObj.en}"!`;
+    msgVi = `Tốt lắm ${childName}! Bây giờ bé hãy phát âm từ "${wordObj.en}" (${wordObj.vi}) nhé!`;
+  } else if(repeatCount === 1) {
+    msgEn = `Great! Say "${wordObj.en}" one more time!`;
+    msgVi = `Đúng rồi! Bé phát âm lại từ "${wordObj.en}" một lần nữa nào!`;
+  } else if(repeatCount === 2) {
+    msgEn = `One last time! Say "${wordObj.en}"!`;
+    msgVi = `Lần cuối cùng nào! Hãy đọc từ "${wordObj.en}"!`;
+  }
+
+  addMessage('teddy', msgEn, msgVi, wordObj.en);
+  speak(msgEn);
+  setSuggestions([{ en: wordObj.en, vi: wordObj.vi }]);
+}
+
+function askToNotebook() {
+  currentStep = 'NOTEBOOK';
+  const wordObj = currentLesson.words[currentWordIndex];
+  const msgEn = `Awesome, ${childName}! Now write "${wordObj.en}" in your notebook! 📝`;
+  const msgVi = `Xuất sắc ${childName}! Giờ bé hãy viết từ "${wordObj.en}" (${wordObj.vi}) vào vở nhé! 📝`;
+  
+  addMessage('teddy', msgEn, msgVi, wordObj.en);
+  speak(msgEn);
+  setSuggestions([]);
+
+  setTimeout(() => {
+    currentWordIndex++;
+    if(currentLesson && currentWordIndex < currentLesson.words.length) {
+      startActionStep();
+    } else {
+      const finEn = `Well done, ${childName}! You learned all words!`;
+      const finVi = `Hoan hô ${childName}! Bé đã học xong tất cả các từ rồi!`;
+      addMessage('teddy', finEn, finVi);
+      speak(finEn);
+    }
+  }, 4500);
+}
+
+function handleUserSpeech(spokenText) {
+  // Loại bỏ khoảng trắng thừa
+  const cleanSpokenText = spokenText.trim();
+  addMessage('user', cleanSpokenText);
+
+  if(currentStep === 'ASK_NAME') {
+    const words = cleanSpokenText.split(' ');
+    childName = words[words.length - 1];
+    
+    currentLesson = lessons[parseInt(lessonSelect.value) || 0];
+    const welcomeEn = `Nice to meet you, ${childName}! Let's learn together!`;
+    const welcomeVi = `Rất vui được gặp ${childName}! Chúng ta cùng học nhé!`;
+    
+    addMessage('teddy', welcomeEn, welcomeVi);
+    speak(welcomeEn);
+
+    setTimeout(() => {
+      startActionStep();
+    }, 2500);
+
+  } else if(currentStep === 'ACTION_QUESTION') {
+    setTimeout(() => {
+      askToRepeat();
+    }, 1000);
+
+  } else if(currentStep === 'PRONOUNCE_REPEAT') {
+    const targetWord = currentLesson.words[currentWordIndex].en.toLowerCase().trim();
+    const spokenWord = cleanSpokenText.toLowerCase();
+
+    // 1. Nếu hệ thống không nghe thấy gì hoặc trả về chuỗi rỗng
+    if (!spokenWord) {
+      const errEn = `I didn't hear you! Try saying "${targetWord}"!`;
+      const errVi = `Teddy chưa nghe rõ, bé nói lại từ "${targetWord}" nhé!`;
+      addMessage('teddy', errEn, errVi, targetWord);
+      speak(errEn);
+      return;
+    }
+
+    // 2. Kiểm tra xem câu bé nói CÓ CHỨA từ cần học hay không
+    if (spokenWord.includes(targetWord)) {
+      repeatCount++;
+      if (repeatCount >= 3) {
+        askToNotebook();
+      } else {
+        setTimeout(() => { askToRepeat(); }, 1200);
+      }
+    } else {
+      const errEn = `Almost! Try saying "${targetWord}" again!`;
+      const errVi = `Gần đúng rồi! Bé thử phát âm lại từ "${targetWord}" nhé!`;
+      addMessage('teddy', errEn, errVi, targetWord);
+      speak(errEn);
+    }
+  }
+}
+
+// Xử lý hiển thị văn bản: In đậm từ vựng & Tạo sự kiện bấm để nghe phát âm CHẬM (0.5)
+function addMessage(sender, enText, viText = '', highlightWord = '') {
+  const msg = document.createElement('div');
+  msg.className = `msg ${sender}`;
+
+  let formattedEn = enText;
+  let formattedVi = viText;
+
+  // Nếu có từ vựng cần Highlight (In đậm + Click nghe CHẬM tốc độ 0.5)
+  if (highlightWord) {
+    const regex = new RegExp(`\\b(${highlightWord})\\b`, 'gi');
+    
+    formattedEn = enText.replace(regex, `<span class="vocab-clickable" onclick="speak('$1', 0.5, event)">$1 🔊</span>`);
+    formattedVi = viText.replace(regex, `<b>$1</b>`);
+  }
+
+  msg.innerHTML = `<div>${formattedEn}</div>`;
+  if(formattedVi) msg.innerHTML += `<div class="vi-text">${formattedVi}</div>`;
+  
+  chatBox.appendChild(msg);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function setSuggestions(list) {
+  suggestionsBox.innerHTML = '';
+  list.forEach(s => {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    
+    let chipText = s.en;
+    if (currentLesson && currentLesson.words[currentWordIndex]) {
+      const target = currentLesson.words[currentWordIndex].en;
+      const regex = new RegExp(`\\b(${target})\\b`, 'gi');
+      chipText = s.en.replace(regex, `<b>$1</b>`);
+    }
+
+    chip.innerHTML = `${chipText} <span style="font-style:italic; opacity:0.85; color:#DC2626;">(${s.vi})</span>`;
+    
+    // Click vào chip gợi ý sẽ đọc với tốc độ 0.65
+    chip.onclick = (e) => speak(s.en, 0.35, e);
+    suggestionsBox.appendChild(chip);
+  });
+}
+
+/**
+ * Hàm phát âm cải tiến:
+ * @param {string} text - Văn bản cần đọc
+ * @param {number} customRate - Tốc độ đọc tùy chỉnh (mặc định 0.85 cho câu thoại)
+ * @param {Event} event - Sự kiện click
+ */
+function speak(text, customRate = 0.85, event = null) {
+  if (event) event.stopPropagation(); // Ngăn sự kiện nổi bọt
+  
+  window.speechSynthesis.cancel(); // Dừng câu đang đọc dở (nếu có)
+  
+  const cleanText = text.replace(/🔊/g, '').trim();
+  const u = new SpeechSynthesisUtterance(cleanText);
+  u.lang = 'en-US';
+  
+  // Gán tốc độ được truyền vào
+  u.rate = customRate;
+
+  u.onstart = () => bearImg.classList.add('speaking');
+  u.onend = () => bearImg.classList.remove('speaking');
+  
+  window.speechSynthesis.speak(u);
+}
+
+// Speech Recognition (STT)
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if(SR) {
+  const recognition = new SR();
+  recognition.lang = 'en-US';
+
+  btnMic.onclick = () => {
+    try { recognition.start(); } catch(e) { recognition.stop(); }
+  };
+
+  recognition.onstart = () => {
+    btnMic.classList.add('listening');
+    btnMic.textContent = '👂 Đang nghe bé nói...';
+  };
+
+  recognition.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    handleUserSpeech(text);
+  };
+
+  recognition.onend = () => {
+    btnMic.classList.remove('listening');
+    btnMic.textContent = '🎤 Bấm để nói với Teddy';
+  };
+}
+
+initLessons();
+</script>
+</body>
+</html>

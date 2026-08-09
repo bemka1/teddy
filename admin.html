@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin - Quản Lý Từ Vựng AI Teddy</title>
+<style>
+  :root { --primary: #4F46E5; --bg: #F3F4F6; --card: #FFFFFF; --text: #1F2937; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+  .container { max-width: 700px; margin: 0 auto; background: var(--card); padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  h1 { color: var(--primary); margin-bottom: 20px; font-size: 22px; }
+  .form-group { margin-bottom: 16px; }
+  label { font-weight: 700; font-size: 13px; color: #4B5563; display: block; margin-bottom: 6px; }
+  input, textarea { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 14px; font-family: inherit; }
+  textarea { height: 120px; resize: vertical; }
+  .btn { background: var(--primary); color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px; }
+  .btn:hover { opacity: 0.9; }
+  .lesson-item { background: #F9FAFB; border: 1px solid #E5E7EB; padding: 12px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .btn-del { background: #EF4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>⚙️ Quản Lý Từ Vựng & AI Teddy</h1>
+
+  <!-- 1. Cấu hình API Key -->
+  <div class="form-group">
+    <label>🔑 Gemini API Key:</label>
+    <input type="password" id="apiKey" placeholder="Dán Gemini API Key vào đây...">
+  </div>
+
+  <button class="btn" id="btnSaveConfig" style="margin-bottom: 24px;">💾 Lưu API Key</button>
+
+  <hr style="border: 0; border-top: 1px solid #E5E7EB; margin-bottom: 20px;">
+
+  <!-- 2. Thêm chủ đề từ vựng mới -->
+  <h2>➕ Thêm Chủ Đề Từ Vựng Mới</h2>
+  <div class="form-group" style="margin-top: 12px;">
+    <label>Tên chủ đề (Ví dụ: Trái cây, Con vật, Gia đình...):</label>
+    <input type="text" id="lessonTitle" placeholder="Nhập tên chủ đề...">
+  </div>
+
+  <div class="form-group">
+    <label>Danh sách từ vựng (Cú pháp: Từ tiếng Anh | Nghĩa tiếng Việt):</label>
+    <textarea id="lessonWords" placeholder="apple | quả táo&#10;banana | quả chuối&#10;cat | con mèo"></textarea>
+  </div>
+
+  <button class="btn" id="btnAddLesson" style="background: #10B981;">➕ Thêm Chủ Đề Này</button>
+
+  <!-- 3. Danh sách bài học hiện có -->
+  <h2 style="margin-top: 24px; margin-bottom: 12px;">📚 Chủ Đề Hiện Có</h2>
+  <div id="lessonList"></div>
+</div>
+
+<script>
+document.getElementById('apiKey').value = localStorage.getItem('TEDDY_API_KEY') || '';
+
+let lessons = JSON.parse(localStorage.getItem('TEDDY_LESSONS') || '[]');
+
+function renderLessons() {
+  const listEl = document.getElementById('lessonList');
+  listEl.innerHTML = '';
+  if(lessons.length === 0) {
+    listEl.innerHTML = '<p style="color:#6B7280; font-style:italic;">Chưa có chủ đề nào. Hãy thêm chủ đề đầu tiên!</p>';
+    return;
+  }
+  lessons.forEach((item, index) => {
+    listEl.innerHTML += `
+      <div class="lesson-item">
+        <div>
+          <strong>${item.title}</strong> (${item.words.length} từ vựng)
+        </div>
+        <button class="btn-del" onclick="deleteLesson(${index})">Xóa</button>
+      </div>
+    `;
+  });
+}
+
+document.getElementById('btnSaveConfig').onclick = () => {
+  localStorage.setItem('TEDDY_API_KEY', document.getElementById('apiKey').value.trim());
+  alert("Đã lưu API Key!");
+};
+
+document.getElementById('btnAddLesson').onclick = () => {
+  const title = document.getElementById('lessonTitle').value.trim();
+  const rawWords = document.getElementById('lessonWords').value.trim();
+
+  if(!title || !rawWords) {
+    alert("Vui lòng điền đầy đủ Tên chủ đề và Danh sách từ vựng!");
+    return;
+  }
+
+  const words = [];
+  rawWords.split('\n').forEach(line => {
+    const parts = line.split('|');
+    if(parts.length >= 2) {
+      words.push({ en: parts[0].trim(), vi: parts[1].trim() });
+    } else if(parts[0].trim()) {
+      words.push({ en: parts[0].trim(), vi: '' });
+    }
+  });
+
+  lessons.push({ title, words });
+  localStorage.setItem('TEDDY_LESSONS', JSON.stringify(lessons));
+  
+  document.getElementById('lessonTitle').value = '';
+  document.getElementById('lessonWords').value = '';
+  
+  renderLessons();
+  alert("Thêm chủ đề thành công!");
+};
+
+function deleteLesson(index) {
+  if(confirm("Bạn có chắc muốn xóa chủ đề này?")) {
+    lessons.splice(index, 1);
+    localStorage.setItem('TEDDY_LESSONS', JSON.stringify(lessons));
+    renderLessons();
+  }
+}
+
+renderLessons();
+</script>
+</body>
+</html>
