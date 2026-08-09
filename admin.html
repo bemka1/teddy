@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin - Quản Lý Từ Vựng AI Teddy</title>
+<title>Admin - Quản Lý Từ Vựng AI Teddy (Firebase)</title>
 <style>
   :root { --primary: #4F46E5; --bg: #F3F4F6; --card: #FFFFFF; --text: #1F2937; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,20 +18,22 @@
   .btn:hover { opacity: 0.9; }
   .lesson-item { background: #F9FAFB; border: 1px solid #E5E7EB; padding: 12px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
   .btn-del { background: #EF4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .status { font-size: 13px; color: #059669; font-weight: bold; margin-bottom: 12px; }
 </style>
 </head>
 <body>
 
 <div class="container">
-  <h1>⚙️ Quản Lý Từ Vựng & AI Teddy</h1>
+  <h1>⚙️ Quản Lý Từ Vựng & AI Teddy (Online Sync)</h1>
+  <div id="statusText" class="status">⏳ Đang kết nối Firebase...</div>
 
   <!-- 1. Cấu hình API Key -->
   <div class="form-group">
-    <label>🔑 Gemini API Key:</label>
+    <label>🔑 Gemini API Key (Lưu chung cho mọi thiết bị):</label>
     <input type="password" id="apiKey" placeholder="Dán Gemini API Key vào đây...">
   </div>
 
-  <button class="btn" id="btnSaveConfig" style="margin-bottom: 24px;">💾 Lưu API Key</button>
+  <button class="btn" id="btnSaveConfig" style="margin-bottom: 24px;">💾 Lưu API Key Lên Cloud</button>
 
   <hr style="border: 0; border-top: 1px solid #E5E7EB; margin-bottom: 20px;">
 
@@ -50,77 +52,104 @@
   <button class="btn" id="btnAddLesson" style="background: #10B981;">➕ Thêm Chủ Đề Này</button>
 
   <!-- 3. Danh sách bài học hiện có -->
-  <h2 style="margin-top: 24px; margin-bottom: 12px;">📚 Chủ Đề Hiện Có</h2>
+  <h2 style="margin-top: 24px; margin-bottom: 12px;">📚 Chủ Đề Trên Cloud</h2>
   <div id="lessonList"></div>
 </div>
 
-<script>
-document.getElementById('apiKey').value = localStorage.getItem('TEDDY_API_KEY') || '';
+<!-- Firebase SDK Module -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-let lessons = JSON.parse(localStorage.getItem('TEDDY_LESSONS') || '[]');
+  // ⚠️ THAY THẾ BẰNG CẤU HÌNH FIREBASE CỦA BẠN ⚠️
+  const firebaseConfig = {
+	  apiKey: "AIzaSyDddr1hfAcpflLETxrMT_iTMVau6tiHkpQ",
+	  authDomain: "teddy-app-7cba6.firebaseapp.com",
+	  projectId: "teddy-app-7cba6",
+	  storageBucket: "teddy-app-7cba6.firebasestorage.app",
+	  messagingSenderId: "831089311694",
+	  appId: "1:831089311694:web:49f898895122f0f7b0359f",
+	  measurementId: "G-VKEQSWYXBV"
+   };
 
-function renderLessons() {
-  const listEl = document.getElementById('lessonList');
-  listEl.innerHTML = '';
-  if(lessons.length === 0) {
-    listEl.innerHTML = '<p style="color:#6B7280; font-style:italic;">Chưa có chủ đề nào. Hãy thêm chủ đề đầu tiên!</p>';
-    return;
-  }
-  lessons.forEach((item, index) => {
-    listEl.innerHTML += `
-      <div class="lesson-item">
-        <div>
-          <strong>${item.title}</strong> (${item.words.length} từ vựng)
-        </div>
-        <button class="btn-del" onclick="deleteLesson(${index})">Xóa</button>
-      </div>
-    `;
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  let currentLessons = [];
+
+  // Đồng bộ dữ liệu realtime từ Firebase
+  onValue(ref(db, 'teddy_data'), (snapshot) => {
+    const data = snapshot.val() || {};
+    document.getElementById('apiKey').value = data.apiKey || '';
+    currentLessons = data.lessons || [];
+    renderLessons(currentLessons);
+    document.getElementById('statusText').innerText = '🟢 Đã kết nối & Đồng bộ thành công!';
   });
-}
 
-document.getElementById('btnSaveConfig').onclick = () => {
-  localStorage.setItem('TEDDY_API_KEY', document.getElementById('apiKey').value.trim());
-  alert("Đã lưu API Key!");
-};
-
-document.getElementById('btnAddLesson').onclick = () => {
-  const title = document.getElementById('lessonTitle').value.trim();
-  const rawWords = document.getElementById('lessonWords').value.trim();
-
-  if(!title || !rawWords) {
-    alert("Vui lòng điền đầy đủ Tên chủ đề và Danh sách từ vựng!");
-    return;
-  }
-
-  const words = [];
-  rawWords.split('\n').forEach(line => {
-    const parts = line.split('|');
-    if(parts.length >= 2) {
-      words.push({ en: parts[0].trim(), vi: parts[1].trim() });
-    } else if(parts[0].trim()) {
-      words.push({ en: parts[0].trim(), vi: '' });
+  function renderLessons(lessons) {
+    const listEl = document.getElementById('lessonList');
+    listEl.innerHTML = '';
+    if(lessons.length === 0) {
+      listEl.innerHTML = '<p style="color:#6B7280; font-style:italic;">Chưa có chủ đề nào trên Cloud. Hãy thêm chủ đề đầu tiên!</p>';
+      return;
     }
-  });
-
-  lessons.push({ title, words });
-  localStorage.setItem('TEDDY_LESSONS', JSON.stringify(lessons));
-  
-  document.getElementById('lessonTitle').value = '';
-  document.getElementById('lessonWords').value = '';
-  
-  renderLessons();
-  alert("Thêm chủ đề thành công!");
-};
-
-function deleteLesson(index) {
-  if(confirm("Bạn có chắc muốn xóa chủ đề này?")) {
-    lessons.splice(index, 1);
-    localStorage.setItem('TEDDY_LESSONS', JSON.stringify(lessons));
-    renderLessons();
+    lessons.forEach((item, index) => {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'lesson-item';
+      itemEl.innerHTML = `
+        <div>
+          <strong>${item.title}</strong> (${item.words ? item.words.length : 0} từ vựng)
+        </div>
+        <button class="btn-del">Xóa</button>
+      `;
+      itemEl.querySelector('.btn-del').onclick = () => deleteLesson(index);
+      listEl.appendChild(itemEl);
+    });
   }
-}
 
-renderLessons();
+  document.getElementById('btnSaveConfig').onclick = () => {
+    const keyVal = document.getElementById('apiKey').value.trim();
+    set(ref(db, 'teddy_data/apiKey'), keyVal)
+      .then(() => alert("Đã lưu API Key lên Cloud!"))
+      .catch(err => alert("Lỗi: " + err.message));
+  };
+
+  document.getElementById('btnAddLesson').onclick = () => {
+    const title = document.getElementById('lessonTitle').value.trim();
+    const rawWords = document.getElementById('lessonWords').value.trim();
+
+    if(!title || !rawWords) {
+      alert("Vui lòng điền đầy đủ Tên chủ đề và Danh sách từ vựng!");
+      return;
+    }
+
+    const words = [];
+    rawWords.split('\n').forEach(line => {
+      const parts = line.split('|');
+      if(parts.length >= 2) {
+        words.push({ en: parts[0].trim(), vi: parts[1].trim() });
+      } else if(parts[0].trim()) {
+        words.push({ en: parts[0].trim(), vi: '' });
+      }
+    });
+
+    currentLessons.push({ title, words });
+    
+    set(ref(db, 'teddy_data/lessons'), currentLessons)
+      .then(() => {
+        document.getElementById('lessonTitle').value = '';
+        document.getElementById('lessonWords').value = '';
+        alert("Thêm chủ đề lên Cloud thành công!");
+      })
+      .catch(err => alert("Lỗi: " + err.message));
+  };
+
+  function deleteLesson(index) {
+    if(confirm("Bạn có chắc muốn xóa chủ đề này trên Cloud?")) {
+      currentLessons.splice(index, 1);
+      set(ref(db, 'teddy_data/lessons'), currentLessons);
+    }
+  }
 </script>
 </body>
 </html>
